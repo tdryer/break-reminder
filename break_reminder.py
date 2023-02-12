@@ -24,11 +24,12 @@ class Timer:
         self._interval_ms = interval_ms
         self._callback = callback
         self._start_timestamp_ms = None
-        self._elapsed_ms = None
+        self._remaining_ms = None
         self._source = None
         self.reset()
 
     def _on_timeout_expiry(self):
+        LOGGER.info("Timer expired")
         try:
             self._callback()
         except:
@@ -45,22 +46,23 @@ class Timer:
 
     def pause(self):
         self._remove_source()
-        # TODO: Replace with remaining time?
-        self._elapsed_ms = self._get_timestamp_ms() - self._start_timestamp_ms
-        LOGGER.info("Pausing timer: %s seconds elapsed", self._elapsed_ms // 1000)
+        self._remaining_ms = max(
+            self._interval_ms - (self._get_timestamp_ms() - self._start_timestamp_ms), 0
+        )
+        LOGGER.info("Timer paused: %s seconds remaining", self._remaining_ms // 1000)
 
     def resume(self):
-        remaining_ms = max(self._interval_ms - self._elapsed_ms, 0)
-        LOGGER.info("Resuming timer: %s seconds remaining", remaining_ms // 1000)
         self._start_timestamp_ms = self._get_timestamp_ms()
-        self._source = GLib.timeout_add(remaining_ms, self._on_timeout_expiry)
+        self._source = GLib.timeout_add(self._remaining_ms, self._on_timeout_expiry)
+        self._remaining_ms = None
+        LOGGER.info("Timer resumed")
 
     def reset(self):
-        LOGGER.info("Resetting timer")
         self._remove_source()
         self._start_timestamp_ms = self._get_timestamp_ms()
-        self._elapsed_ms = 0
         self._source = GLib.timeout_add(self._interval_ms, self._on_timeout_expiry)
+        self._remaining_ms = None
+        LOGGER.info("Timer reset")
 
 
 class BreakReminder:
@@ -122,7 +124,7 @@ class BreakReminder:
             else:
                 self._timer.resume()
         else:
-            # TODO: Only do this if we're not on break still?
+            # XXX: Only do this if we're not on break still?
             self._start_break_timer()
 
 
