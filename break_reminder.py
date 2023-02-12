@@ -123,9 +123,6 @@ class BreakReminder:
                 self._timer.reset()
             else:
                 self._timer.resume()
-        else:
-            # XXX: Only do this if we're not on break still?
-            self._start_break_timer()
 
 
 def main():
