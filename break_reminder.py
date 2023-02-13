@@ -8,7 +8,7 @@ import gi
 
 gi.require_version("Notify", "0.7")
 gi.require_version("GnomeDesktop", "3.0")
-from gi.repository import Notify, GnomeDesktop, GLib
+from gi.repository import Notify, GnomeDesktop, GLib  # noqa
 
 LOGGER = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ def callback(func):
     def wrapper(*args, **kwargs):
         try:
             func(*args, **kwargs)
-        except:
+        except Exception:
             LOGGER.exception("Callback raised unhandled exception")
             sys.exit(1)
 
