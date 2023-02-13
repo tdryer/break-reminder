@@ -7,7 +7,7 @@ import gi
 
 gi.require_version("Notify", "0.7")
 gi.require_version("GnomeDesktop", "3.0")
-from gi.repository import Notify, GnomeDesktop, GLib  # noqa
+from gi.repository import GLib, GnomeDesktop, Notify
 
 LOGGER = logging.getLogger(__name__)
 

@@ -1,0 +1,3 @@
+[tool.ruff]
+select = ["ALL"]
+ignore = ["ANN", "D", "BLE", "COM", "E402", "S101"]
