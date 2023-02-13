@@ -1,4 +1,5 @@
 from datetime import timedelta
+import functools
 import logging
 import sys
 
@@ -19,21 +20,33 @@ BREAK_DURATION = timedelta(seconds=5)
 IDLE_TIMEOUT = timedelta(seconds=1)
 
 
+def callback(func):
+    """Wrap callback to exit if there is an unhandled exception."""
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            func(*args, **kwargs)
+        except:
+            LOGGER.exception("Callback raised unhandled exception")
+            sys.exit(1)
+
+    return wrapper
+
+
 class Timer:
-    def __init__(self, interval_ms, callback):
+    def __init__(self, interval_ms, callback_):
         self._interval_ms = interval_ms
-        self._callback = callback
+        self._callback = callback_
         self._start_timestamp_ms = None
         self._remaining_ms = None
         self._source = None
         self.reset()
 
+    @callback
     def _on_timeout_expiry(self):
         LOGGER.info("Timer expired")
-        try:
-            self._callback()
-        except:
-            LOGGER.exception("Exception in timer callback")
+        self._callback()
         return False
 
     def _remove_source(self):
@@ -83,6 +96,7 @@ class BreakReminder:
         assert self._timer is None
         self._timer = Timer(interval_ms, self._on_start_break)
 
+    @callback
     def _on_start_break(self):
         """Callback when break is started."""
         logging.info("Start break")
@@ -96,6 +110,7 @@ class BreakReminder:
             notification,
         )
 
+    @callback
     def _on_finish_break(self, notification):
         """Callback when break is finished."""
         logging.info("Finish break")
@@ -104,6 +119,7 @@ class BreakReminder:
         if self._is_idle:
             self._timer.pause()
 
+    @callback
     def _on_idle_start(self, _monitor, _watch_id):
         """Callback when idle is started."""
         LOGGER.info("Idle start")
@@ -113,6 +129,7 @@ class BreakReminder:
         idle_timestamp = GLib.get_monotonic_time()
         self._idle_monitor.add_user_active_watch(self._on_idle_end, idle_timestamp)
 
+    @callback
     def _on_idle_end(self, _monitor, _watch_id, idle_timestamp):
         """Callback when idle is finished."""
         elapsed = timedelta(microseconds=GLib.get_monotonic_time() - idle_timestamp)
