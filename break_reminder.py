@@ -1,5 +1,4 @@
 import argparse
-from datetime import timedelta
 import functools
 import logging
 import sys
@@ -72,11 +71,13 @@ class Timer:
 
 
 class BreakReminder:
-    def __init__(self, idle_monitor, break_interval, break_duration, idle_timeout):
+    def __init__(
+        self, idle_monitor, break_interval_ms, break_duration_ms, idle_timeout_ms
+    ):
         self._idle_monitor = idle_monitor
-        self._break_interval_ms = break_interval / timedelta(milliseconds=1)
-        self._break_duration_ms = break_duration / timedelta(milliseconds=1)
-        self._idle_timeout_ms = idle_timeout / timedelta(milliseconds=1)
+        self._break_interval_ms = break_interval_ms
+        self._break_duration_ms = break_duration_ms
+        self._idle_timeout_ms = idle_timeout_ms
         self._is_idle = False  # Assume not idle on start
         self._timer = None
 
@@ -179,9 +180,9 @@ def main():
 
     BreakReminder(
         idle_monitor,
-        timedelta(seconds=args.break_interval_seconds),
-        timedelta(seconds=args.break_duration_seconds),
-        timedelta(seconds=args.idle_timeout_seconds),
+        args.break_interval_seconds * 1000,
+        args.break_duration_seconds * 1000,
+        args.idle_timeout_seconds * 1000,
     ).start()
 
     try:
