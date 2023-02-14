@@ -54,10 +54,10 @@ class Timer:
         self._remaining_ms = max(
             self._interval_ms - (self._get_timestamp_ms() - self._start_timestamp_ms), 0
         )
+        self._start_timestamp_ms = self._get_timestamp_ms()
         LOGGER.info("Timer paused: %s seconds remaining", self._remaining_ms // 1000)
 
     def resume(self):
-        self._start_timestamp_ms = self._get_timestamp_ms()
         self._source = GLib.timeout_add(self._remaining_ms, self._on_timeout_expiry)
         self._remaining_ms = None
         LOGGER.info("Timer resumed")
