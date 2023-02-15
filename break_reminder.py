@@ -156,7 +156,7 @@ def main():
     parser.add_argument(
         "--idle-timeout-seconds",
         type=int,
-        default=60,
+        default=2 * 60,
         help="Idle timeout in seconds",
     )
     parser.add_argument(
