@@ -71,56 +71,83 @@ class Timer:
 
 
 class BreakReminder:
+    _ACTION_POSTPONE_BREAK = "POSTPONE_BREAK"
+
     def __init__(
-        self, idle_monitor, break_interval_ms, break_duration_ms, idle_timeout_ms
+        self,
+        idle_monitor,
+        break_interval_ms,
+        break_duration_ms,
+        break_postpone_seconds,
+        idle_timeout_ms,
     ):
         self._idle_monitor = idle_monitor
         self._break_interval_ms = break_interval_ms
         self._break_duration_ms = break_duration_ms
+        self._break_postpone_ms = break_postpone_seconds
         self._idle_timeout_ms = idle_timeout_ms
         self._is_idle = False  # Assume not idle on start
-        self._timer = None
+        # TODO: combine timers?
+        self._start_break_timer = None  # Timer for start of break
+        self._end_break_timer = None  # Timer for end of break
+
+        self._notification = Notify.Notification.new("Break Time")
+        self._notification.set_urgency(Notify.Urgency.CRITICAL)
+        self._notification.add_action(
+            self._ACTION_POSTPONE_BREAK, "Postpone", self._on_postpone_break
+        )
 
     def start(self):
-        self._start_break_timer()
+        self._begin_start_break_timer()
         self._idle_monitor.add_idle_watch(self._idle_timeout_ms, self._on_idle_start)
 
-    def _start_break_timer(self):
+    def _begin_start_break_timer(self):
         """Start timer for the next break."""
         interval_ms = self._break_interval_ms - self._break_duration_ms
-        assert self._timer is None
-        self._timer = Timer(interval_ms, self._on_start_break)
+        assert self._start_break_timer is None
+        self._start_break_timer = Timer(interval_ms, self._on_start_break)
 
     @callback
     def _on_start_break(self):
         """Callback when break is started."""
         logging.info("Start break")
-        notification = Notify.Notification.new("Break Time")
-        notification.set_urgency(Notify.Urgency.CRITICAL)
-        notification.show()
-        self._timer = None
-        GLib.timeout_add(
-            self._break_duration_ms,
-            self._on_finish_break,
-            notification,
-        )
+        self._notification.show()
+        self._start_break_timer = None
+        assert self._end_break_timer is None
+        self._end_break_timer = Timer(self._break_duration_ms, self._on_finish_break)
 
     @callback
-    def _on_finish_break(self, notification):
+    def _on_finish_break(self):
         """Callback when break is finished."""
         logging.info("Finish break")
-        notification.close()
-        self._start_break_timer()
+        self._notification.close()
+        self._end_break_timer = None
+        self._begin_start_break_timer()
         if self._is_idle:
-            self._timer.pause()
+            self._start_break_timer.pause()
+
+    @callback
+    def _on_postpone_break(self, _notification, action):
+        """Callback when break is postponed."""
+        assert action == self._ACTION_POSTPONE_BREAK
+        logging.info("Postpone break")
+        assert self._end_break_timer
+        # TODO: Add cancel method to timer?
+        self._end_break_timer.pause()
+        self._end_break_timer = None
+        self._notification.close()
+        GLib.timeout_add(
+            self._break_postpone_ms,
+            self._on_start_break,
+        )
 
     @callback
     def _on_idle_start(self, _monitor, _watch_id):
         """Callback when idle is started."""
         LOGGER.info("Idle start")
         self._is_idle = True
-        if self._timer is not None:
-            self._timer.pause()
+        if self._start_break_timer is not None:
+            self._start_break_timer.pause()
         idle_timestamp = GLib.get_monotonic_time()
         self._idle_monitor.add_user_active_watch(self._on_idle_end, idle_timestamp)
 
@@ -130,11 +157,11 @@ class BreakReminder:
         elapsed_ms = (GLib.get_monotonic_time() - idle_timestamp) // 1000
         LOGGER.info("Idle end: %s seconds elapsed", elapsed_ms // 1000)
         self._is_idle = False
-        if self._timer is not None:
+        if self._start_break_timer is not None:
             if elapsed_ms > self._break_duration_ms:
-                self._timer.reset()
+                self._start_break_timer.reset()
             else:
-                self._timer.resume()
+                self._start_break_timer.resume()
 
 
 def main():
@@ -152,6 +179,12 @@ def main():
         type=int,
         default=5 * 60,
         help="Break duration in seconds",
+    )
+    parser.add_argument(
+        "--break-postpone-seconds",
+        type=int,
+        default=5 * 60,
+        help="Duration break can be postponed in seconds",
     )
     parser.add_argument(
         "--idle-timeout-seconds",
@@ -182,6 +215,7 @@ def main():
         idle_monitor,
         args.break_interval_seconds * 1000,
         args.break_duration_seconds * 1000,
+        args.break_postpone_seconds * 1000,
         args.idle_timeout_seconds * 1000,
     ).start()
 
