@@ -70,6 +70,7 @@ class Timer:
     @callback
     def _on_timeout_expiry(self):
         self._source = None
+        self._remaining_ms = 0
         self._callback()
         return False
 
@@ -116,8 +117,12 @@ class BreakReminder:
         """Callback when break is finished."""
         LOGGER.info("Finish break")
         self._notification.close()
-        # If idle, wait until active again to start break timer
-        if not self._is_idle:
+        if self._is_idle:
+            # Ensure timer is reset before it is started again
+            self._start_break_timer.start(reset=True)
+            self._start_break_timer.stop()
+        else:
+            # Wait until active again to start break timer
             self._start_break_timer.start(reset=True)
 
     @callback
