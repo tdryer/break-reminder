@@ -86,8 +86,8 @@ class BreakReminder:
         postpone_duration_ms,
         idle_timeout_ms,
     ):
-        self._postpone_duration_ms = postpone_duration_ms
-        self._is_idle = False  # Assume not idle on start
+        # Assume not idle on start
+        self._is_idle = False
         # Timer for start of break
         self._start_break_timer = Timer(work_duration_ms, self._on_start_break)
         # Timer for end of break
@@ -96,7 +96,10 @@ class BreakReminder:
         self._notification = Notify.Notification.new("Break Time")
         self._notification.set_urgency(Notify.Urgency.CRITICAL)
         self._notification.add_action(
-            self._ACTION_POSTPONE_BREAK, "Postpone", self._on_postpone_break
+            self._ACTION_POSTPONE_BREAK,
+            "Postpone",
+            self._on_postpone_break,
+            postpone_duration_ms,
         )
 
         self._start_break_timer.start()
@@ -119,13 +122,13 @@ class BreakReminder:
             self._start_break_timer.start(reset=True)
 
     @callback
-    def _on_postpone_break(self, _notification, action):
+    def _on_postpone_break(self, _notification, action, postpone_duration_ms):
         """Callback when break is postponed."""
         assert action == self._ACTION_POSTPONE_BREAK
         LOGGER.info("Postpone break")
         self._end_break_timer.stop()
         self._notification.close()
-        GLib.timeout_add(self._postpone_duration_ms, self._on_start_break)
+        GLib.timeout_add(postpone_duration_ms, self._on_start_break)
 
     @callback
     def _on_idle_start(self, idle_monitor, _watch_id):
