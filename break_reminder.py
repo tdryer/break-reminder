@@ -114,7 +114,7 @@ class BreakReminder:
 
     @callback
     def _on_end_break(self):
-        """Callback when break is finished."""
+        """Callback when break is ended."""
         LOGGER.info("Finish break")
         self._notification.close()
         # Only start timer when active
@@ -143,7 +143,7 @@ class BreakReminder:
 
     @callback
     def _on_idle_end(self, _idle_monitor, _watch_id, idle_timestamp):
-        """Callback when idle is finished."""
+        """Callback when idle is ended."""
         elapsed_ms = get_timestamp_ms() - idle_timestamp
         LOGGER.info("Idle end: %s seconds elapsed", elapsed_ms // 1000)
         self._is_idle = False
