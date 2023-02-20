@@ -156,9 +156,6 @@ class BreakReminder:
             self._start_break_timer.start(reset=was_long_idle)
 
 
-MS_PER_MINUTE = 60 * 1000
-
-
 def main():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
