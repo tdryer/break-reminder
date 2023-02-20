@@ -91,7 +91,7 @@ class BreakReminder:
         # Timer for start of break
         self._start_break_timer = Timer(work_duration_ms, self._on_start_break)
         # Timer for end of break
-        self._end_break_timer = Timer(break_duration_ms, self._on_finish_break)
+        self._end_break_timer = Timer(break_duration_ms, self._on_end_break)
 
         self._notification = Notify.Notification.new("Break Time")
         self._notification.set_urgency(Notify.Urgency.CRITICAL)
@@ -113,7 +113,7 @@ class BreakReminder:
         self._end_break_timer.start(reset=True)
 
     @callback
-    def _on_finish_break(self):
+    def _on_end_break(self):
         """Callback when break is finished."""
         LOGGER.info("Finish break")
         self._notification.close()
