@@ -81,20 +81,17 @@ class BreakReminder:
     def __init__(
         self,
         idle_monitor,
-        break_interval_ms,
         break_duration_ms,
-        break_postpone_seconds,
+        work_duration_ms,
+        postpone_duration_ms,
         idle_timeout_ms,
     ):
-        self._idle_monitor = idle_monitor
-        self._break_postpone_ms = break_postpone_seconds
+        self._postpone_duration_ms = postpone_duration_ms
         self._is_idle = False  # Assume not idle on start
-        self._start_break_timer = Timer(
-            break_interval_ms - break_duration_ms, self._on_start_break
-        )  # Timer for start of break
-        self._end_break_timer = Timer(
-            break_duration_ms, self._on_finish_break
-        )  # Timer for end of break
+        # Timer for start of break
+        self._start_break_timer = Timer(work_duration_ms, self._on_start_break)
+        # Timer for end of break
+        self._end_break_timer = Timer(break_duration_ms, self._on_finish_break)
 
         self._notification = Notify.Notification.new("Break Time")
         self._notification.set_urgency(Notify.Urgency.CRITICAL)
@@ -103,7 +100,7 @@ class BreakReminder:
         )
 
         self._start_break_timer.start()
-        self._idle_monitor.add_idle_watch(idle_timeout_ms, self._on_idle_start)
+        idle_monitor.add_idle_watch(idle_timeout_ms, self._on_idle_start)
 
     @callback
     def _on_start_break(self):
@@ -128,10 +125,10 @@ class BreakReminder:
         LOGGER.info("Postpone break")
         self._end_break_timer.stop()
         self._notification.close()
-        GLib.timeout_add(self._break_postpone_ms, self._on_start_break)
+        GLib.timeout_add(self._postpone_duration_ms, self._on_start_break)
 
     @callback
-    def _on_idle_start(self, _monitor, _watch_id):
+    def _on_idle_start(self, idle_monitor, _watch_id):
         """Callback when idle is started."""
         LOGGER.info("Idle start")
         self._is_idle = True
@@ -139,10 +136,10 @@ class BreakReminder:
         if self._start_break_timer.is_running:
             self._start_break_timer.stop()
         idle_timestamp = get_timestamp_ms()
-        self._idle_monitor.add_user_active_watch(self._on_idle_end, idle_timestamp)
+        idle_monitor.add_user_active_watch(self._on_idle_end, idle_timestamp)
 
     @callback
-    def _on_idle_end(self, _monitor, _watch_id, idle_timestamp):
+    def _on_idle_end(self, _idle_monitor, _watch_id, idle_timestamp):
         """Callback when idle is finished."""
         elapsed_ms = get_timestamp_ms() - idle_timestamp
         LOGGER.info("Idle end: %s seconds elapsed", elapsed_ms // 1000)
@@ -156,38 +153,47 @@ class BreakReminder:
             self._start_break_timer.start(reset=was_long_idle)
 
 
+MS_PER_MINUTE = 60 * 1000
+
+
 def main():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument(
-        "--break-interval-seconds",
+        "--break-duration",
         type=int,
-        default=60 * 60,
-        help="Break interval in seconds",
+        default=5,
+        help="Break interval in minutes",
     )
     parser.add_argument(
-        "--break-duration-seconds",
+        "--work-duration",
         type=int,
-        default=5 * 60,
-        help="Break duration in seconds",
+        default=55,
+        help="Work duration in minutes",
     )
     parser.add_argument(
-        "--break-postpone-seconds",
+        "--postpone-duration",
         type=int,
-        default=5 * 60,
-        help="Duration break can be postponed in seconds",
+        default=5,
+        help="Postpone duration in minutes",
     )
     parser.add_argument(
-        "--idle-timeout-seconds",
+        "--idle-timeout",
         type=int,
-        default=2 * 60,
-        help="Idle timeout in seconds",
+        default=2,
+        help="Idle timeout in minutes",
     )
     parser.add_argument(
         "--debug",
         action="store_true",
         help="Enable debug logging",
+    )
+    parser.add_argument(
+        "--ms-per-minute",
+        type=int,
+        default=60_000,
+        help=argparse.SUPPRESS,
     )
     args = parser.parse_args()
 
@@ -205,10 +211,10 @@ def main():
 
     BreakReminder(
         idle_monitor,
-        args.break_interval_seconds * 1000,
-        args.break_duration_seconds * 1000,
-        args.break_postpone_seconds * 1000,
-        args.idle_timeout_seconds * 1000,
+        args.break_duration * args.ms_per_minute,
+        args.work_duration * args.ms_per_minute,
+        args.postpone_duration * args.ms_per_minute,
+        args.idle_timeout * args.ms_per_minute,
     )
 
     try:
