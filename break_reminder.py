@@ -220,11 +220,12 @@ def main():
         args.postpone_duration * args.ms_per_minute,
         args.idle_timeout * args.ms_per_minute,
     )
+    LOGGER.warning("Started")
 
     try:
         GLib.MainLoop().run()
     except KeyboardInterrupt:
-        LOGGER.info("Caught SIGINT")
+        LOGGER.warning("Caught SIGINT")
 
 
 if __name__ == "__main__":
