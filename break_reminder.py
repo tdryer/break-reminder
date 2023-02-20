@@ -81,6 +81,7 @@ class BreakReminder:
     def __init__(
         self,
         idle_monitor,
+        notification,
         break_duration_ms,
         work_duration_ms,
         postpone_duration_ms,
@@ -93,14 +94,13 @@ class BreakReminder:
         # Timer for end of break
         self._end_break_timer = Timer(break_duration_ms, self._on_end_break)
 
-        self._notification = Notify.Notification.new("Break Time")
-        self._notification.set_urgency(Notify.Urgency.CRITICAL)
-        self._notification.add_action(
+        notification.add_action(
             self._ACTION_POSTPONE_BREAK,
             "Postpone",
             self._on_postpone_break,
             postpone_duration_ms,
         )
+        self._notification = notification
 
         self._start_break_timer.start()
         idle_monitor.add_idle_watch(idle_timeout_ms, self._on_idle_start)
@@ -205,12 +205,16 @@ def main():
     if not Notify.init("Break Reminder"):
         sys.exit("Failed to initialize notifier")
 
+    notification = Notify.Notification.new("Break Time")
+    notification.set_urgency(Notify.Urgency.CRITICAL)
+
     idle_monitor = GnomeDesktop.IdleMonitor()
     if not idle_monitor.init():
         sys.exit("Failed to initialize idle monitor")
 
     BreakReminder(
         idle_monitor,
+        notification,
         args.break_duration * args.ms_per_minute,
         args.work_duration * args.ms_per_minute,
         args.postpone_duration * args.ms_per_minute,
