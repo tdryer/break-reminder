@@ -11,6 +11,8 @@ from gi.repository import GLib, GnomeDesktop, Notify
 
 LOGGER = logging.getLogger(__name__)
 
+NOTIFY_CLOSED_REASON_DISMISSED = 2
+
 
 def callback(func):
     """Wrap callback to exit if there is an unhandled exception."""
@@ -76,28 +78,27 @@ class Timer:
 
 
 class BreakReminder:
-    _ACTION_POSTPONE_BREAK = "POSTPONE_BREAK"
-
     def __init__(
         self,
         idle_monitor,
-        notification,
         break_duration_ms,
         work_duration_ms,
         postpone_duration_ms,
         idle_timeout_ms,
     ):
-        # Assume not idle on start
-        self._is_idle = False
         self._work_timer = Timer(work_duration_ms, self._on_work_timer_expired)
         self._break_timer = Timer(break_duration_ms, self._on_break_timer_expired)
+        self._postpone_timer = Timer(postpone_duration_ms, self._on_postpone_expired)
 
-        notification.add_action(
-            self._ACTION_POSTPONE_BREAK,
-            "Postpone",
-            self._on_postpone_break,
-            postpone_duration_ms,
-        )
+        notification = Notify.Notification.new("Break Time")
+        # Keep notification on screen until dismissed.
+        notification.set_urgency(Notify.Urgency.CRITICAL)
+        # Do not automatically close notification after action is invoked since
+        # this can't be distinguished from the user dismissing the
+        # notification.
+        notification.set_hint("resident", GLib.Variant.new_boolean(True))
+        notification.connect("closed", self._on_notification_closed)
+        notification.add_action("postpone", "Postpone", self._on_notification_postponed)
         self._notification = notification
 
         self._work_timer.start()
@@ -108,50 +109,59 @@ class BreakReminder:
         """Callback when work timer expires."""
         LOGGER.info("Work timer expired")
         self._notification.show()
-        self._break_timer.start(reset=True)
 
     @callback
     def _on_break_timer_expired(self):
         """Callback when break timer expires."""
         LOGGER.info("Break timer expired")
         self._notification.close()
-        # Only start timer when active
-        if not self._is_idle:
-            self._work_timer.start(reset=True)
-
-    @callback
-    def _on_postpone_break(self, _notification, action, postpone_duration_ms):
-        """Callback when break is postponed."""
-        assert action == self._ACTION_POSTPONE_BREAK
-        LOGGER.info("Postpone break")
-        self._break_timer.stop()
-        self._notification.close()
-        GLib.timeout_add(postpone_duration_ms, self._on_work_timer_expired)
+        if self._postpone_timer.is_running:
+            LOGGER.info("Postpone timer cancelled")
+            self._postpone_timer.stop()
 
     @callback
     def _on_idle_start(self, idle_monitor, _watch_id):
         """Callback when idle is started."""
         LOGGER.info("Idle start")
-        self._is_idle = True
-        # Do not count idle time towards the next break
         if self._work_timer.is_running:
             self._work_timer.stop()
-        idle_timestamp = get_timestamp_ms()
-        idle_monitor.add_user_active_watch(self._on_idle_end, idle_timestamp)
+        self._break_timer.start(reset=True)
+        idle_monitor.add_user_active_watch(self._on_idle_end)
 
     @callback
-    def _on_idle_end(self, _idle_monitor, _watch_id, idle_timestamp):
+    def _on_idle_end(self, _idle_monitor, _watch_id):
         """Callback when idle is ended."""
-        elapsed_ms = get_timestamp_ms() - idle_timestamp
-        LOGGER.info("Idle end: %s seconds elapsed", elapsed_ms // 1000)
-        self._is_idle = False
-        # If not in a break, start the timer for the next break again,
-        # resetting it if idle for longer than the break interval.
-        if not self._break_timer.is_running:
-            was_long_idle = elapsed_ms > self._break_timer.interval_ms
-            if was_long_idle:
-                LOGGER.info("Reset break timer")
-            self._work_timer.start(reset=was_long_idle)
+        LOGGER.info("Idle end")
+        if self._break_timer.is_running:
+            self._work_timer.start()
+            self._break_timer.stop()
+        else:
+            self._work_timer.start(reset=True)
+
+    def _postpone_break(self):
+        """Postpone the break notification."""
+        LOGGER.info("Starting postpone timer")
+        self._postpone_timer.start(reset=True)
+
+    @callback
+    def _on_postpone_expired(self):
+        LOGGER.info("Postpone timer expired")
+        self._notification.show()
+
+    @callback
+    def _on_notification_closed(self, notification):
+        """Callback when notification is closed."""
+        if notification.get_closed_reason() != NOTIFY_CLOSED_REASON_DISMISSED:
+            return
+        LOGGER.info("Notification dismissed")
+        self._postpone_break()
+
+    @callback
+    def _on_notification_postponed(self, _notification, _action):
+        """Callback when notification is postponed."""
+        LOGGER.info("Notification postponed")
+        self._notification.close()
+        self._postpone_break()
 
 
 def main():
@@ -203,16 +213,12 @@ def main():
     if not Notify.init("Break Reminder"):
         sys.exit("Failed to initialize notifier")
 
-    notification = Notify.Notification.new("Break Time")
-    notification.set_urgency(Notify.Urgency.CRITICAL)
-
     idle_monitor = GnomeDesktop.IdleMonitor()
     if not idle_monitor.init():
         sys.exit("Failed to initialize idle monitor")
 
     BreakReminder(
         idle_monitor,
-        notification,
         args.break_duration * args.ms_per_minute,
         args.work_duration * args.ms_per_minute,
         args.postpone_duration * args.ms_per_minute,
