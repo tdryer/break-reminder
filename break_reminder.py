@@ -129,18 +129,20 @@ class BreakReminder:
     def _on_idle_start(self, idle_monitor, _watch_id):
         """Callback when idle is started."""
         LOGGER.info("Idle start")
+        work_timer_was_running = self._work_timer.is_running
         if self._work_timer.is_running:
             self._work_timer.stop()
         self._break_timer.start(reset=True)
-        idle_monitor.add_user_active_watch(self._on_idle_end)
+        idle_monitor.add_user_active_watch(self._on_idle_end, work_timer_was_running)
 
     @callback
-    def _on_idle_end(self, _idle_monitor, _watch_id):
+    def _on_idle_end(self, _idle_monitor, _watch_id, work_timer_was_running):
         """Callback when idle is ended."""
         LOGGER.info("Idle end")
         if self._break_timer.is_running:
-            self._work_timer.start()
             self._break_timer.stop()
+            if work_timer_was_running:
+                self._work_timer.start()
         else:
             self._work_timer.start(reset=True)
 
