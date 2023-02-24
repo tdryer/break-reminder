@@ -28,51 +28,27 @@ def callback(func):
     return wrapper
 
 
-def get_timestamp_ms():
-    """Get monotonic ms timestamp."""
-    return GLib.get_monotonic_time() // 1000
-
-
 class Timer:
-    """GLib-based timer that can be stopped and restarted."""
+    """Timer interface for `GLib.timeout_add`."""
 
-    def __init__(self, interval_ms, callback_):
-        self._interval_ms = interval_ms
+    def __init__(self, callback_):
         self._callback = callback_
-        self._start_timestamp_ms = None
-        self._remaining_ms = interval_ms
         self._source = None
 
-    @property
-    def is_running(self):
-        """Whether the timer is running."""
-        return self._source is not None
-
-    @property
-    def interval_ms(self):
-        """Timer interval in ms."""
-        return self._interval_ms
-
-    def start(self, reset=False):
-        """Start (and optionally reset) timer."""
-        assert not self.is_running
-        if reset:
-            self._remaining_ms = self._interval_ms
-        self._start_timestamp_ms = get_timestamp_ms()
-        self._source = GLib.timeout_add(self._remaining_ms, self._on_timeout_expiry)
+    def start(self, interval_ms):
+        """Start timer."""
+        assert self._source is None
+        self._source = GLib.timeout_add(interval_ms, self._on_timeout_expiry)
 
     def stop(self):
         """Stop timer."""
-        assert self.is_running
-        GLib.Source.remove(self._source)
-        self._source = None
-        elapsed_ms = get_timestamp_ms() - self._start_timestamp_ms
-        self._remaining_ms = max(self._remaining_ms - elapsed_ms, 0)
+        if self._source is not None:
+            GLib.Source.remove(self._source)
+            self._source = None
 
     @callback
     def _on_timeout_expiry(self):
         self._source = None
-        self._remaining_ms = self._interval_ms
         self._callback()
         return False
 
@@ -85,8 +61,9 @@ class BreakReminder:
         work_duration_ms,
         postpone_duration_ms,
     ):
-        self._work_timer = Timer(work_duration_ms, self._on_work_timer_expired)
-        self._postpone_timer = Timer(postpone_duration_ms, self._on_postpone_expired)
+        self._timer = Timer(self._on_timer_expired)
+        self._work_duration_ms = work_duration_ms
+        self._postpone_duration_ms = postpone_duration_ms
 
         notification = Notify.Notification.new("Break Time")
         # Keep notification on screen until dismissed.
@@ -99,7 +76,7 @@ class BreakReminder:
         notification.add_action("postpone", "Postpone", self._on_notification_postponed)
         self._notification = notification
 
-        self._work_timer.start()
+        self._timer.start(self._work_duration_ms)
         idle_monitor.add_idle_watch(break_duration_ms, self._on_idle_start)
 
     def close_notification(self):
@@ -107,37 +84,29 @@ class BreakReminder:
         self._notification.close()
 
     @callback
-    def _on_work_timer_expired(self):
-        """Callback when work timer expires."""
-        LOGGER.info("Work timer expired")
+    def _on_timer_expired(self):
+        """Callback when timer expires."""
+        LOGGER.info("Timer expired")
         self._notification.show()
 
     @callback
     def _on_idle_start(self, idle_monitor, _watch_id):
         """Callback when idle is started."""
-        LOGGER.info("Idle start")
+        LOGGER.info("Break completed")
         self._notification.close()
-        if self._work_timer.is_running:
-            self._work_timer.stop()
-        if self._postpone_timer.is_running:
-            self._postpone_timer.stop()
+        self._timer.stop()
         idle_monitor.add_user_active_watch(self._on_idle_end)
 
     @callback
     def _on_idle_end(self, _idle_monitor, _watch_id):
         """Callback when idle is ended."""
-        LOGGER.info("Idle end")
-        self._work_timer.start(reset=True)
+        LOGGER.info("Idle ended")
+        self._timer.start(self._work_duration_ms)
 
     def _postpone_break(self):
         """Postpone the break notification."""
         LOGGER.info("Starting postpone timer")
-        self._postpone_timer.start(reset=True)
-
-    @callback
-    def _on_postpone_expired(self):
-        LOGGER.info("Postpone timer expired")
-        self._notification.show()
+        self._timer.start(self._postpone_duration_ms)
 
     @callback
     def _on_notification_closed(self, notification):
