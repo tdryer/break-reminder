@@ -87,7 +87,9 @@ class BreakReminder:
         idle_timeout_ms,
     ):
         self._work_timer = Timer(work_duration_ms, self._on_work_timer_expired)
-        self._break_timer = Timer(break_duration_ms, self._on_break_timer_expired)
+        self._break_timer = Timer(
+            break_duration_ms - idle_timeout_ms, self._on_break_timer_expired
+        )
         self._postpone_timer = Timer(postpone_duration_ms, self._on_postpone_expired)
 
         notification = Notify.Notification.new("Break Time")
