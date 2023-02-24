@@ -106,6 +106,10 @@ class BreakReminder:
         self._work_timer.start()
         idle_monitor.add_idle_watch(idle_timeout_ms, self._on_idle_start)
 
+    def close_notification(self):
+        """Close notification."""
+        self._notification.close()
+
     @callback
     def _on_work_timer_expired(self):
         """Callback when work timer expires."""
@@ -219,7 +223,7 @@ def main():
     if not idle_monitor.init():
         sys.exit("Failed to initialize idle monitor")
 
-    BreakReminder(
+    break_reminder = BreakReminder(
         idle_monitor,
         args.break_duration * args.ms_per_minute,
         args.work_duration * args.ms_per_minute,
@@ -232,6 +236,7 @@ def main():
         GLib.MainLoop().run()
     except KeyboardInterrupt:
         LOGGER.warning("Caught SIGINT")
+        break_reminder.close_notification()
 
 
 if __name__ == "__main__":
