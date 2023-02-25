@@ -1,0 +1,9 @@
+[Unit]
+Description=Break Reminder
+
+[Service]
+EnvironmentFile=-%E/break-reminder.env
+ExecStart=/usr/bin/break-reminder $BREAK_REMINDER_ARGS
+
+[Install]
+WantedBy=gnome-session.target
