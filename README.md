@@ -2,16 +2,24 @@
 
 A break reminder daemon for GNOME.
 
+* Shows notification when desktop has been active for the work interval.
+* Closes notification when desktop has been idle for the break interval.
+* Notification action allows hiding the notification for the postpone interval.
+* Idle monitor is aware of applications that inhibit idle.
+
 ## Install
 
-    make deb
-    sudo apt install ./*.deb
-    systemctl --user enable break-reminder --now
+Run `make install`.
+
+The included systemd unit will automatically run the daemon.
 
 ## Uninstall
 
-    systemctl --user disable break-reminder --now
-    sudo apt remove break-reminder
+Run `make uninstall`.
+
+## Usage
+
+See `break-reminder --help`.
 
 ## Configure
 
