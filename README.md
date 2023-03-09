@@ -28,3 +28,14 @@ environment file located in `XDG_CONFIG_HOME`; eg.
 `~/.config/break-reminder.env`:
 
     BREAK_REMINDER_ARGS=--debug
+
+## Known Issues
+
+### Google Chrome
+
+When running under X11, [Google Chrome will reset the idle timer after playing
+audio][1], including notification sounds. A workaround for this is to [disable
+the X Screen Saver extension][2].
+
+[1]: https://bugs.chromium.org/p/chromium/issues/detail?id=827528
+[2]: https://unix.stackexchange.com/a/707430
