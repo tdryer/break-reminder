@@ -11,8 +11,8 @@ uninstall:
 
 .PHONY: check
 check:
-	@black --check --quiet break-reminder
-	@ruff check break-reminder
+	black --check --quiet break-reminder
+	ruff check break-reminder
 
 .PHONY: clean
 clean:

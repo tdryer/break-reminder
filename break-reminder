@@ -68,9 +68,11 @@ class BreakReminder:
         work_duration_ms,
         postpone_duration_ms,
     ):
-        self._timer = Timer(self._on_timer_expired)
+        self._idle_monitor = idle_monitor
+        self._break_duration_ms = break_duration_ms
         self._work_duration_ms = work_duration_ms
         self._postpone_duration_ms = postpone_duration_ms
+        self._timer = Timer(self._on_timer_expired)
 
         notification = Notify.Notification.new("Break Time")
         # Keep notification on screen until dismissed.
@@ -84,11 +86,11 @@ class BreakReminder:
         notification.add_action("cancel", "Cancel", self._on_notification_cancelled)
         self._notification = notification
 
+    def __enter__(self):
         self._timer.start(self._work_duration_ms)
-        idle_monitor.add_idle_watch(break_duration_ms, self._on_idle_start)
+        self._idle_monitor.add_idle_watch(self._break_duration_ms, self._on_idle_start)
 
-    def close_notification(self):
-        """Close notification."""
+    def __exit__(self, exc_type, exc_value, traceback):
         self._notification.close()
 
     @callback
@@ -100,6 +102,7 @@ class BreakReminder:
     @callback
     def _on_idle_start(self, idle_monitor, _watch_id):
         """Callback when idle is started."""
+        # TODO: Message is misleading because notification may not be open
         LOGGER.info("Closing break notification")
         self._notification.close()
         self._timer.stop()
@@ -119,21 +122,22 @@ class BreakReminder:
     @callback
     def _on_notification_closed(self, notification):
         """Callback when notification is closed."""
+        # Ignore closing notification programmatically
         if notification.get_closed_reason() != NOTIFY_CLOSED_REASON_DISMISSED:
             return
         self._postpone_break()
 
     @callback
-    def _on_notification_postponed(self, _notification, _action):
+    def _on_notification_postponed(self, notification, _action):
         """Callback when notification is postponed."""
-        self._notification.close()
+        notification.close()
         self._postpone_break()
 
     @callback
-    def _on_notification_cancelled(self, _notification, _action):
+    def _on_notification_cancelled(self, notification, _action):
         """Callback when notification is cancelled."""
         LOGGER.info("Cancelling break")
-        self._notification.close()
+        notification.close()
         self._timer.start(self._work_duration_ms)
 
 
@@ -184,19 +188,18 @@ def main():
     if not idle_monitor.init():
         sys.exit("Failed to initialize idle monitor")
 
-    break_reminder = BreakReminder(
+    LOGGER.info("Starting break reminder")
+
+    with BreakReminder(
         idle_monitor,
         args.break_duration * args.ms_per_minute,
         args.work_duration * args.ms_per_minute,
         args.postpone_duration * args.ms_per_minute,
-    )
-    LOGGER.info("Starting break reminder")
-
-    try:
-        GLib.MainLoop().run()
-    except KeyboardInterrupt:
-        LOGGER.info("Caught SIGINT")
-        break_reminder.close_notification()
+    ):
+        try:
+            GLib.MainLoop().run()
+        except KeyboardInterrupt:
+            LOGGER.info("Caught SIGINT")
 
 
 if __name__ == "__main__":
