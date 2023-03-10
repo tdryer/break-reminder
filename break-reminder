@@ -82,8 +82,8 @@ class BreakReminder:
         # notification.
         notification.set_hint("resident", GLib.Variant.new_boolean(True))
         notification.connect("closed", self._on_notification_closed)
-        notification.add_action("postpone", "Postpone", self._on_notification_postponed)
-        notification.add_action("cancel", "Cancel", self._on_notification_cancelled)
+        notification.add_action("postpone", "Postpone", self._on_notification_action)
+        notification.add_action("cancel", "Cancel", self._on_notification_action)
         self._notification = notification
 
     def __enter__(self):
@@ -102,8 +102,7 @@ class BreakReminder:
     @callback
     def _on_idle_start(self, idle_monitor, _watch_id):
         """Callback when idle is started."""
-        # TODO: Message is misleading because notification may not be open
-        LOGGER.info("Closing break notification")
+        LOGGER.info("User has been idle for break duration")
         self._notification.close()
         self._timer.stop()
         idle_monitor.add_user_active_watch(self._on_idle_end)
@@ -111,34 +110,28 @@ class BreakReminder:
     @callback
     def _on_idle_end(self, _idle_monitor, _watch_id):
         """Callback when idle is ended."""
-        LOGGER.info("Starting work timer")
+        LOGGER.info("User is no longer idle")
         self._timer.start(self._work_duration_ms)
-
-    def _postpone_break(self):
-        """Postpone the break notification."""
-        LOGGER.info("Postponing break")
-        self._timer.start(self._postpone_duration_ms)
 
     @callback
     def _on_notification_closed(self, notification):
         """Callback when notification is closed."""
-        # Ignore closing notification programmatically
+        # Ignore when notification is closed programmatically
         if notification.get_closed_reason() != NOTIFY_CLOSED_REASON_DISMISSED:
             return
-        self._postpone_break()
+        LOGGER.info("Notification closed")
+        self._timer.start(self._postpone_duration_ms)
 
     @callback
-    def _on_notification_postponed(self, notification, _action):
-        """Callback when notification is postponed."""
+    def _on_notification_action(self, notification, action):
+        LOGGER.info("Notification %s action selected", action)
         notification.close()
-        self._postpone_break()
-
-    @callback
-    def _on_notification_cancelled(self, notification, _action):
-        """Callback when notification is cancelled."""
-        LOGGER.info("Cancelling break")
-        notification.close()
-        self._timer.start(self._work_duration_ms)
+        self._timer.start(
+            {
+                "postpone": self._postpone_duration_ms,
+                "cancel": self._work_duration_ms,
+            }[action]
+        )
 
 
 def main():
