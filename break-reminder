@@ -81,6 +81,7 @@ class BreakReminder:
         notification.set_hint("resident", GLib.Variant.new_boolean(True))
         notification.connect("closed", self._on_notification_closed)
         notification.add_action("postpone", "Postpone", self._on_notification_postponed)
+        notification.add_action("cancel", "Cancel", self._on_notification_cancelled)
         self._notification = notification
 
         self._timer.start(self._work_duration_ms)
@@ -127,6 +128,13 @@ class BreakReminder:
         """Callback when notification is postponed."""
         self._notification.close()
         self._postpone_break()
+
+    @callback
+    def _on_notification_cancelled(self, _notification, _action):
+        """Callback when notification is cancelled."""
+        LOGGER.info("Cancelling break")
+        self._notification.close()
+        self._timer.start(self._work_duration_ms)
 
 
 def main():
