@@ -5,6 +5,7 @@
 import argparse
 import functools
 import logging
+import re
 import sys
 
 import gi
@@ -134,38 +135,63 @@ class BreakReminder:
         )
 
 
+DURATION_PATTERN = re.compile(r"(?P<number>[1-9]\d*)(?P<unit>[smh]{0,1})")
+DURATION_UNIT = {
+    "s": 1_000,
+    "m": 60 * 1_000,
+    "h": 60 * 60 * 1_000,
+}
+
+
+class InvalidDuration(argparse.ArgumentTypeError):
+    def __str__(self):
+        return f"invalid duration value: {self.args[0]!r}"
+
+
+def parse_duration(string):
+    """Parse a duration and return it in milliseconds."""
+    match = DURATION_PATTERN.fullmatch(string)
+    if not match:
+        raise InvalidDuration(string)
+    number = int(match.group("number"))
+    unit = match.group("unit") or "m"
+    return number * DURATION_UNIT[unit]
+
+
 def main():
     parser = argparse.ArgumentParser(
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        description="Break reminder daemon for GNOME.",
+        epilog=(
+            """
+            Specify durations as a number followed by a unit. Valid units are
+            `s` for seconds, `m` for minutes, and `h` for hours`. Assumes
+            minutes if not specified.
+            """
+        ),
     )
     parser.add_argument(
         "--break-duration",
-        type=int,
-        default=5,
-        help="Break interval in minutes",
+        type=parse_duration,
+        default="5m",
+        help="Break duration",
     )
     parser.add_argument(
         "--work-duration",
-        type=int,
-        default=55,
-        help="Work duration in minutes",
+        type=parse_duration,
+        default="55m",
+        help="Work duration",
     )
     parser.add_argument(
         "--postpone-duration",
-        type=int,
-        default=5,
-        help="Postpone duration in minutes",
+        type=parse_duration,
+        default="5m",
+        help="Postpone duration",
     )
     parser.add_argument(
         "--debug",
         action="store_true",
         help="Enable debug logging",
-    )
-    parser.add_argument(
-        "--ms-per-minute",
-        type=int,
-        default=60_000,
-        help=argparse.SUPPRESS,
     )
     args = parser.parse_args()
 
@@ -185,9 +211,9 @@ def main():
 
     with BreakReminder(
         idle_monitor,
-        args.break_duration * args.ms_per_minute,
-        args.work_duration * args.ms_per_minute,
-        args.postpone_duration * args.ms_per_minute,
+        args.break_duration,
+        args.work_duration,
+        args.postpone_duration,
     ):
         try:
             GLib.MainLoop().run()
