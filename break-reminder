@@ -3,6 +3,7 @@
 """A break reminder daemon for GNOME."""
 
 import argparse
+import datetime
 import functools
 import logging
 import re
@@ -40,11 +41,13 @@ class Timer:
         self._callback = callback_
         self._source = None
 
-    def start(self, interval_ms):
+    def start(self, duration):
         """Start timer."""
-        LOGGER.debug("Starting timer for %s ms", interval_ms)
+        LOGGER.debug("Starting timer for %s", duration)
         assert self._source is None
-        self._source = GLib.timeout_add(interval_ms, self._on_timeout_expiry)
+        self._source = GLib.timeout_add(
+            duration / datetime.timedelta(milliseconds=1), self._on_timeout_expiry
+        )
 
     def stop(self):
         """Stop timer."""
@@ -65,14 +68,14 @@ class BreakReminder:
     def __init__(
         self,
         idle_monitor,
-        break_duration_ms,
-        work_duration_ms,
-        postpone_duration_ms,
+        break_duration,
+        work_duration,
+        postpone_duration,
     ):
         self._idle_monitor = idle_monitor
-        self._break_duration_ms = break_duration_ms
-        self._work_duration_ms = work_duration_ms
-        self._postpone_duration_ms = postpone_duration_ms
+        self._break_duration = break_duration
+        self._work_duration = work_duration
+        self._postpone_duration = postpone_duration
         self._timer = Timer(self._on_timer_expired)
 
         notification = Notify.Notification.new("Break Time")
@@ -88,8 +91,11 @@ class BreakReminder:
         self._notification = notification
 
     def __enter__(self):
-        self._timer.start(self._work_duration_ms)
-        self._idle_monitor.add_idle_watch(self._break_duration_ms, self._on_idle_start)
+        self._timer.start(self._work_duration)
+        self._idle_monitor.add_idle_watch(
+            self._break_duration / datetime.timedelta(milliseconds=1),
+            self._on_idle_start,
+        )
 
     def __exit__(self, exc_type, exc_value, traceback):
         self._notification.close()
@@ -112,7 +118,7 @@ class BreakReminder:
     def _on_idle_end(self, _idle_monitor, _watch_id):
         """Callback when idle is ended."""
         LOGGER.info("User is no longer idle")
-        self._timer.start(self._work_duration_ms)
+        self._timer.start(self._work_duration)
 
     @callback
     def _on_notification_closed(self, notification):
@@ -121,7 +127,7 @@ class BreakReminder:
         if notification.get_closed_reason() != NOTIFY_CLOSED_REASON_DISMISSED:
             return
         LOGGER.info("Notification closed")
-        self._timer.start(self._postpone_duration_ms)
+        self._timer.start(self._postpone_duration)
 
     @callback
     def _on_notification_action(self, notification, action):
@@ -129,17 +135,17 @@ class BreakReminder:
         notification.close()
         self._timer.start(
             {
-                "postpone": self._postpone_duration_ms,
-                "skip": self._work_duration_ms,
+                "postpone": self._postpone_duration,
+                "skip": self._work_duration,
             }[action]
         )
 
 
 DURATION_PATTERN = re.compile(r"(?P<number>[1-9]\d*)(?P<unit>[smh]{0,1})")
 DURATION_UNIT = {
-    "s": 1_000,
-    "m": 60 * 1_000,
-    "h": 60 * 60 * 1_000,
+    "s": "seconds",
+    "m": "minutes",
+    "h": "hours",
 }
 
 
@@ -149,13 +155,13 @@ class InvalidDuration(argparse.ArgumentTypeError):
 
 
 def parse_duration(string):
-    """Parse a duration and return it in milliseconds."""
+    """Parse a duration string."""
     match = DURATION_PATTERN.fullmatch(string)
     if not match:
         raise InvalidDuration(string)
     number = int(match.group("number"))
-    unit = match.group("unit") or "m"
-    return number * DURATION_UNIT[unit]
+    unit_char = match.group("unit") or "m"
+    return datetime.timedelta(**{DURATION_UNIT[unit_char]: number})
 
 
 def main():
@@ -166,7 +172,7 @@ def main():
             """
             Specify durations as a number followed by a unit. Valid units are
             `s` for seconds, `m` for minutes, and `h` for hours`. Assumes
-            minutes if not specified.
+            minutes if unit is not specified.
             """
         ),
     )
