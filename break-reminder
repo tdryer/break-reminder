@@ -83,7 +83,7 @@ class BreakReminder:
         notification.set_hint("resident", GLib.Variant.new_boolean(True))
         notification.connect("closed", self._on_notification_closed)
         notification.add_action("postpone", "Postpone", self._on_notification_action)
-        notification.add_action("cancel", "Cancel", self._on_notification_action)
+        notification.add_action("skip", "Skip", self._on_notification_action)
         self._notification = notification
 
     def __enter__(self):
@@ -129,7 +129,7 @@ class BreakReminder:
         self._timer.start(
             {
                 "postpone": self._postpone_duration_ms,
-                "cancel": self._work_duration_ms,
+                "skip": self._work_duration_ms,
             }[action]
         )
 
